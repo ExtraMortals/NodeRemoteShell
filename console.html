@@ -1,0 +1,125 @@
+<html>
+
+<head>
+    <title>Remote CMD Client</title>
+    <style>
+        ul {
+            list-style-type: none;
+        }
+
+        input {
+            border: none;
+        }
+
+        *:focus {
+            outline: none;
+            border: none;
+        }
+
+        form {
+            display: flex;
+            text-align: left;
+            position: sticky;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+        }
+
+        form>input {
+            flex-grow: 1;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+        }
+
+        canvas {
+            position: fixed;
+            height: 60%;
+            right: 1;
+            top: 1;
+            z-index: 10;
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="ss" width="3840" height="2160"></canvas>
+    <ul id="messages"></ul>
+    <form id="form" action="">
+        <label id="curpath"></label>
+        <input id="input" autocomplete="off" />
+    </form>
+</body>
+
+</html>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.3.1/socket.io.js"></script>
+<script>
+    var socket = io();
+
+    var messages = document.getElementById('messages');
+    var form = document.getElementById('form');
+    var input = document.getElementById('input');
+    var last = '';
+    var cvs = document.getElementById("ss");
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (input.value.substr(0, 5) === "loop ") {
+            var cmd = input.value.substr(5);
+            setInterval(function () {
+                socket.emit('cmd', cmd)
+            }, 100)
+            input.value = '';
+            return;
+        }
+        if (input.value) {
+            socket.emit('cmd', input.value);
+            last = input.value;
+            input.value = '';
+        }
+    })
+
+    socket.on('stdout', function (data) {
+        var split = data.split('\n');
+        for (var i in split) {
+            if (/^[A-Z]:\\.*>$/.test(split[i])) {
+                var path = document.getElementById('curpath');
+                path.innerText = split[i];
+            }
+            else if (split[i] !== last) {
+                var item = document.createElement('li');
+                item.innerText = split[i];
+                messages.appendChild(item);
+            }
+        }
+        window.scrollTo(0, document.body.scrollHeight);
+    })
+
+    socket.on('stderr', function (data) {
+        var split = data.split('\n');
+        for (var i in split) {
+            var item = document.createElement('li');
+            item.innerText = split[i];
+            messages.appendChild(item);
+        }
+        window.scrollTo(0, document.body.scrollHeight);
+    })
+
+    socket.on('image', function (data) {
+        cvs.hidden = false;
+        var ctx = cvs.getContext('2d');
+        var img = new Image();
+        img.src = `data:image/png;base64,${data}`;
+        console.log(data.length)
+        img.onload = function () {
+            ctx.drawImage(img, 0, 0);
+        }
+    })
+
+    socket.on('clear', function (data) {
+        cvs.hidden = true;
+        messages.innerHTML = '';
+    })
+</script>
